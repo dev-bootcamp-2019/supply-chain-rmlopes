@@ -50,10 +50,10 @@ contract SupplyChain {
   event Received(uint sku);
 
   /* Create a modifer that checks if the msg.sender is the owner of the contract */
-  modifier isOwner(address _address) { require (owner == _address); _;}
-  modifier verifyCaller (address _address) { require (msg.sender == _address); _;}
+  modifier isOwner(address _address) { require (owner == _address, "isOwner failed"); _;}
+  modifier verifyCaller (address _address) { require (msg.sender == _address, "verifyCaller failed"); _;}
 
-  modifier paidEnough(uint _price) { require (msg.value >= _price); _;}
+  modifier paidEnough(uint _price) { require (msg.value >= _price, "Did not pay enough."); _;}
   modifier checkValue(uint _sku) {
     //refund them after pay for item (why it is before, _ checks for logic before func)
     _;
@@ -65,10 +65,10 @@ contract SupplyChain {
   /* For each of the following modifiers, use what you learned about modifiers
    to give them functionality. For example, the forSale modifier should require
    that the item with the given sku has the state ForSale. */
-  modifier forSale(uint256 sku){ require (items[sku].state == State.ForSale); _;}
-  modifier sold(uint256 sku){ require (items[sku].state == State.Sold); _;}
-  modifier shipped(uint256 sku){ require (items[sku].state == State.Shipped); _;}
-  modifier received(uint256 sku){ require (items[sku].state == State.Received); _;}
+  modifier forSale(uint256 sku){ require (items[sku].state == State.ForSale, "Item not for sale"); _;}
+  modifier sold(uint256 sku){ require (items[sku].state == State.Sold, "Item not sold yet"); _;}
+  modifier shipped(uint256 sku){ require (items[sku].state == State.Shipped, "Item not shipped yet"); _;}
+  modifier received(uint256 sku){ require (items[sku].state == State.Received, "Item not received yet"); _;}
 
 
   constructor() public payable{
@@ -138,6 +138,6 @@ contract SupplyChain {
   }
 
   function() external{
-    revert();
+    revert("Reverted trough the fallback function");
   }
 }
