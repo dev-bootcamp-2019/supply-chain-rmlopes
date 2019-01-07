@@ -3,14 +3,11 @@ pragma solidity ^0.5.0;
 import "truffle/Assert.sol";
 import "truffle/DeployedAddresses.sol";
 import "../contracts/SupplyChain.sol";
-import "../contracts/SupplyChainWrapper.sol";
-import "../contracts/ThrowProxy.sol";
 
 contract TestSupplyChain {
 
     uint public initialBalance = 1 ether;
-    SupplyChainWrapper sc;
-    ThrowProxy throwproxy;
+    SupplyChain sc;
     SupplyChainUser seller;
     SupplyChainUser buyer;
     SupplyChainUser owner;
@@ -21,93 +18,105 @@ contract TestSupplyChain {
         Assert.equal(address(this).balance, 1 ether, "Contract was not deployed with initial balance of 1 ether");
 
         //sc = new SupplyChain();
-        //sc = SupplyChain(DeployedAddresses.SupplyChain());    
-        sc = SupplyChainWrapper(DeployedAddresses.SupplyChainWrapper());    
-        throwproxy = new ThrowProxy(address(sc)); 
-
+        sc = SupplyChain(DeployedAddresses.SupplyChain());    
+        
         seller = new SupplyChainUser();
         buyer = (new SupplyChainUser).value(100)();
-    }
-    
-    function testConstructor() public{
-        Assert.equal(sc.skuCount(), 0, "SKU count should be initialized to 0.");
-        Assert.equal(sc.owner(), msg.sender, "The owner of the contract should be initialized.");
-    }
-    
-    // This adds an item with price 10 wei
-    function testAddItem() public {
-        string memory name = "The Item";
-        uint price = 10 wei;
-        uint expectedSKU = 0;
-        uint expectedState = 0;
-        address expectedSeller = address(seller);
-        address expectedBuyer = address(0);
 
-        seller.addItem(sc, name, price);
-        
-        (string memory _name, uint _sku, uint _price, uint _state, address _seller, address _buyer) = sc.fetchItem(expectedSKU);
+        //Add two items 0 and 1
+        seller.addItem(sc, "Item0", 10);
+        seller.addItem(sc, "Item1", 10);
+        //buy item 1 so that it is in state Sold
+        buyer.buyItem(address(sc), 1, 10);
 
-        Assert.equal(_name, name, "Name of the item does not match the expected value");
-        Assert.equal(_sku, expectedSKU, "The SKU of the item does not match the expected value");
-        Assert.equal(_price, price, "The price of the item does not match the expected value");
-        Assert.equal(_state, expectedState, "The state of the item does not match the expected value");
-        Assert.equal(_seller, expectedSeller, "The seller address of the item does not match the expected value");
-        Assert.equal(_buyer, expectedBuyer, "The buyer address of the item does not match the expected value (0)");
-    }
-
-    // Ship Item
-    function testShipItemVerifyCaller() public {
-        //string memory expectedName = "The Item";
-        uint expectedSKU = 0;
-        //uint expectedState = 1;
-        uint sellerInitBalance = address(seller).balance;
-        uint buyerInitBalance = address(buyer).balance;
-        
-        Assert.equal(sellerInitBalance, 0, "Buyer initial balance should be 0.");
-        Assert.equal(buyerInitBalance, 100, "Buyer initial balance should be 100 wei.");
-        
-        (string memory _name, uint _sku, uint _price, uint _state, address _seller, address _buyer) = sc.fetchItem(expectedSKU);
-        Assert.equal(_state, 0, "Item should be in state ForSale");
-        
-        buyer.buyItem(sc, 0, 10);
-        (_name, _sku, _price, _state, _seller, _buyer) = sc.fetchItem(expectedSKU);
-        Assert.equal(_state, 1, "Item should be in state Sold");
-        
-        //Even if the seller ships the item the test will return False (??)
-        seller.shipItem(SupplyChainWrapper(address(throwproxy)), 0);
-
-        // If we ship it without the throwproxy then its ok!
-        //seller.shipItem(sc, 0);
-        (_name, _sku, _price, _state, _seller, _buyer) = sc.fetchItem(expectedSKU);
-        Assert.equal(_state, 2, "Item should be in state Shipped");
-        
-
-        bool r = throwproxy.execute.gas(200000)();
-        Assert.isFalse(r, "Should be false because the it is not the seller that is shipping the item");
-
+        //Sanity check Item0
+        (string memory _name, uint _sku, uint _price, uint _state, address _seller, address _buyer) = sc.fetchItem(0);
+        Assert.equal(_name, "Item0", "Name of the item does not match the expected value");
+        Assert.equal(_sku, 0, "The SKU of the item does not match the expected value");
+        Assert.equal(_price, 10, "The price of the item does not match the expected value");
+        Assert.equal(_state, 0, "The state of the item does not match the expected value");
+        Assert.equal(address(_seller), address(seller), 
+                     "The seller address of the item does not match the expected value");
+        Assert.equal(address(_buyer), address(0), 
+                     "The buyer address of the item does not match the expected value (0)");
+        //Sanity check Item1
+        (_name, _sku, _price, _state, _seller, _buyer) = sc.fetchItem(1);
+        Assert.equal(_name, "Item1", "Name of the item does not match the expected value");
+        Assert.equal(_sku, 1, "The SKU of the item does not match the expected value");
+        Assert.equal(_price, 10, "The price of the item does not match the expected value");
+        Assert.equal(_state, 1, "The state of the item does not match the expected value");
+        Assert.equal(address(_seller), address(seller), 
+                     "The seller address of the item does not match the expected value");
+        Assert.equal(address(_buyer), address(buyer), 
+                     "The buyer address of the item does not match the expected value (0)");
     }
 
     // buyItem
 
     // test for failure if user does not send enough funds
-    // test for purchasing an item that is not for Sale
+    function testBuyItemNotEnoughFunds() public {
+        uint sku = 0;
+        (bool ok, ) = address(buyer).call(
+            abi.encodeWithSignature("buyItem(address,uint256,uint256)", address(sc), sku, 1));
+        
+        Assert.isFalse(ok, "Should be false because not enough funds were sent!");
+    }
 
-    // function testBuyItemNotEnoughFunds() public {
-    //     string memory expectedName = "The Item";
-    //     uint expectedSKU = 0;
-    //     uint expectedState = 1;
-    //     uint sellerInitBalance = address(seller).balance;
-    //     uint buyerInitBalance = address(buyer).balance;
+    // test for purchasing an item that is not for Sale
+    function testBuyItemNotForSale() public {
+        uint sku = 1;
         
-    //     Assert.equal(sellerInitBalance, 0, "Buyer initial balance should be 0.");
-    //     Assert.equal(buyerInitBalance, 100, "Buyer initial balance should be 100 wei.");
+        (bool ok, ) = address(buyer).call(
+            abi.encodeWithSignature("buyItem(address,uint256,uint256)", address(sc), sku, 10));
         
-    //     buyer.buyItem(SupplyChain(address(throwproxy)), 0, 1);
-    //     bool r = throwproxy.execute.gas(200000)();
-    //     Assert.isFalse(r, "Should be false because not enough functionds were sent!");
-    // }
+        Assert.isFalse(ok, "Should be false because item is already Sold!");
+    }
+    
+    // shipItem
+
+    // test for calls that are made by not the seller
+    function testShipItemNotSeller() public {
+        uint sku = 1;
+        
+        (bool ok, ) = address(buyer).call(
+            abi.encodeWithSignature("shipItem(address,uint256)", address(sc), sku));
+        
+        Assert.isFalse(ok, "Should be false because the it is not the seller that is shipping the item");
+    }
+
+    // test for trying to ship an item that is not marked Sold
+    function testShipItemNotSold() public {
+        uint sku = 0;
+        
+        (bool ok, ) = address(seller).call(
+            abi.encodeWithSignature("shipItem(address,uint256)", address(sc), sku));
+        
+        Assert.isFalse(ok, "Should be false because the item is not sold yet.");
+    }
+    
+    // receiveItem
+
+    // test calling the function on an item not marked Shipped
+    function testReceiveItemNotShipped() public {
+        uint sku = 1;
+
+        (bool ok, ) = address(buyer).call(
+            abi.encodeWithSignature("receiveItem(address,uint256)", address(sc), sku));
+        
+        Assert.isFalse(ok, "Should be false because the item is notshipped.");
+    }
 
     
+    // test calling the function from an address that is not the buyer
+    function testReceiveItemNotBuyer() public {
+        uint sku = 1;
+
+        seller.shipItem(address(sc),sku);
+        (bool ok, ) = address(seller).call(
+            abi.encodeWithSignature("receiveItem(address,uint256)", address(sc), sku));
+        
+        Assert.isFalse(ok, "Should be false because it is not the buyer.");
+    }
 
     function() external{
     }
@@ -123,25 +132,25 @@ contract SupplyChainUser {
         return _supplyChain.addItem(_item, _price);
     }
 
-    function shipItem(SupplyChainWrapper _supplyChain, uint _sku) public {
-        
-        _supplyChain.callShipItem(_sku);
-        //_supplyChain.shipItem(_sku);
+    function shipItem(address _supplyChain, uint _sku) public {
+        SupplyChain tsc = SupplyChain(_supplyChain);
+        tsc.shipItem(_sku);
     }
 
     // Functions for the buyer
-    function buyItem(SupplyChain _supplyChain, uint _sku, uint amount) public{
-         
-        _supplyChain.buyItem.value(amount)(_sku);
+    function buyItem(address _supplyChain, uint _sku, uint amount) public{
+         SupplyChain tsc = SupplyChain(_supplyChain);
+        tsc.buyItem.value(amount)(_sku);
 
     }
 
-    function receiveItem(SupplyChain _supplyChain, uint _sku) public {
-
-        _supplyChain.receiveItem(_sku);
+    function receiveItem(address _supplyChain, uint _sku) public {
+        SupplyChain tsc = SupplyChain(_supplyChain);
+        tsc.receiveItem(_sku);
     }
 
     function() external payable{
+        //revert("Reverted transaction on SupplyChainUser");
     }
 }
 
