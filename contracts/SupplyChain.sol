@@ -138,6 +138,6 @@ contract SupplyChain {
   }
 
   function() external{
-    revert("Reverted trough the fallback function");
+    revert("Reverted through the fallback function at SupplyChain");
   }
 }
